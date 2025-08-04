@@ -1,0 +1,309 @@
+---
+title: "2021-2022 Gift Analysis BRFC"
+author: "Mario Mercado Diaz"
+output:
+  html_document:
+    df_print: paged
+---
+```
+With this analysis, I am trying to describe what gift processing and donations look like over the course of last year. Our goal is to asses our performance and find ways to streamline donation workflow and systems for year-end fundraising. This is data was downloaded from Exceed on January 10, 2023 which includes data on donors from December 2021 to December 2022.
+```
+
+```{r, eval= FALSE, echo=FALSE}
+library(dplyr)
+library(summarytools)
+library(readxl)
+library(lubridate)
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(viridis)
+library(formattable)
+library(zoo)
+```
+
+```{r, eval= FALSE, echo=FALSE}
+#Loading Data worksheet from Exceed
+
+Original_Gift_Analysis_Dec21_22 <- read_excel("20230224 Gift Analysis Dec21-22.xlsx", 
+    sheet = "RAWDATA")
+View(Original_Gift_Analysis_Dec21_22)
+
+Gift_Analysis_Dec21_22 <- Original_Gift_Analysis_Dec21_22
+
+#Cleaning through data and preparing it for analysis 
+
+Gift_Analysis_Dec21_22$GiftDate <- as.Date(Gift_Analysis_Dec21_22$GiftDate) #Formatting dates
+view(Gift_Analysis_Dec21_22$GiftDate)
+
+Gift_Analysis_Dec21_22$year <- strftime(Gift_Analysis_Dec21_22$GiftDate, "%Y")    # Create year column
+Gift_Analysis_Dec21_22$month <- months(Gift_Analysis_Dec21_22$GiftDate, abbreviate = FALSE)   # Create month column
+options(digits=5)
+options(scipen=999)
+```
+
+
+Performing Analysis
+--------------------
+```
+We are trying to understand different dimensions of donating and gift processing including, reasons for donating, month-to-month summaries, preferred methods for donation (cash, check, paypal, etc.), and acknowledgement rates. 
+```
+
+### Month-to-Month averages and medians
+
+```{r, eval=FALSE, echo=FALSE, Gift_Analysis_Dec21_22}
+
+monthly_donavg_2122 <- Gift_Analysis_Dec21_22 %>%
+  group_by(year,month) %>%
+  summarise(month_average = mean(Amount)) %>% 
+  dplyr::mutate_if(is.numeric, format, 2)
+
+monthly_donmed_2122 <- Gift_Analysis_Dec21_22 %>%
+  group_by(year,month) %>%
+  summarise(month_median = median(Amount)) %>% 
+  dplyr::mutate_if(is.numeric, format, 2)
+```
+
+```{r, echo=FALSE, monthly_donavg}
+
+knitr::kable(monthly_donavg, "pipe", col.names = c("Year", "Month", "Monthly Average ($)"), align = c("c","c","c"), row.names = FALSE, caption = "Monthly Donation Averages")
+```
+
+In this table, we can see that November had the largest average donation of $11,096.64, while March and April had the lowest ($408.61 and $406.38, respectively ) 
+
+num_gifts_month_2122 <- Gift_Analysis_Dec21_22 %>% #Total No. of Gifts per Month
+ggplot(Gift_Analysis_Dec21_22, mapping = aes(x=reorder(format(Gift_Analysis_Dec21_22$GiftDate, '%b %y'), Gift_Analysis_Dec21_22$GiftDate)))+ 
+  geom_histogram(stat = "count", fill = "red") +
+  ylab("Amount of Gifts") +
+  xlab("Month") +
+  ggtitle("Number of Gifts per Month") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+totalamount_sumdata <- Gift_Analysis_Dec21_22 %>% #Total raised per Month
+  filter(FundCode == "40101") %>% 
+  mutate(yearmon = format(GiftDate, "%Y-%m")) %>% 
+  group_by(yearmon) %>%
+  summarise(total = sum(Amount))
+  
+tot_gifts_month_2122 <- ggplot(totalamount_sumdata, aes(yearmon,total))+ 
+  geom_col(fill="red") +
+  ylab("Total Raised $") +
+  xlab("Month") +
+  ggtitle("Total Raised from Individual Donors per Month") +
+  theme(plot.title = element_text(hjust = 0.5),
+  axis.text.x = element_text(angle = 65, hjust = 1, face="bold")) +
+  scale_x_discrete(labels=c("2021-12" = "December 21", "2022-01" = "January" , "2022-02" = "February", "2022-03" ="March", "2022-04" = "April",
+                            "2022-05" = "May", "2022-06" = "June", "2022-07" = "July", "2022-08" = "August", "2022-09" = "September", 
+                            "2022-10" = "October", "2022-11" = "November", "2022-12" = "December 22"))
+                            
+bxplot_2122 <- boxplot(Amount ~ reorder(format(Gift_Analysis_Dec21_22$GiftDate, '%b %y'), Gift_Analysis_Dec21_22$GiftDate), 
+  outline = FALSE,
+  data = Gift_Analysis_Dec21_22,
+  main = "Dispersion of Donation Amounts by Month",
+  xlab = "Month",
+  ylab = "Donation Amount ($)"
+  )
+  
+indvdonation_data <- Gift_Analysis_Dec21_22 %>% #Total raised per Month
+  filter(FundCode == "40101")
+  
+boxplot(Amount ~ reorder(format(indvdonation_data$GiftDate, '%b %y'), indvdonation_data$GiftDate), 
+  outline = FALSE,
+  data = indvdonation_data,
+  main = "Dispersion of Donation Amounts by Month (Indiv. Donors)",
+  xlab = "Month",
+  ylab = "Donation Amount ($)"
+  )
+  
+
+freqgifts_method <- Gift_Analysis_Dec21_22 %>%
+ggplot(Gift_Analysis_Dec21_22, mapping = aes(x=reorder(format(Gift_Analysis_Dec21_22$GiftDate, '%b %y'), Gift_Analysis_Dec21_22$GiftDate), 
+  outline = FALSE, fill = Method)) + 
+  geom_histogram(stat = "count") +
+  ylab("Amount of Gifts") +
+  xlab("Month") +
+  geom_density(stat = "count") + 
+  ggtitle("Number of Gifts by Method per Month") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_fill_viridis(discrete=TRUE, option="F")
+
+
+intv_table_giftamount <- table(cut(Gift_Analysis_Dec21_22$Amount,seq(0,1000,100)))
+print("Ranges of Gift amounts (up to $1000)")
+print(intv_table_giftamount)
+
+rankone <- subset(Gift_Analysis_Dec21_22, Amount <= 149 & FundCode==40101)
+ranktwo <- subset(Gift_Analysis_Dec21_22, Amount >=150 & Amount <=249 & FundCode==40101)
+rankthree <- subset(Gift_Analysis_Dec21_22, Amount >=250 & Amount <=499 & FundCode==40101)
+rankfour <- subset(Gift_Analysis_Dec21_22, Amount >=500 & Amount <=999 & FundCode==40101)
+rankfive <- subset(Gift_Analysis_Dec21_22, Amount >=1000 & Amount <=4999 & FundCode==40101)
+ranksix <- subset(Gift_Analysis_Dec21_22, Amount >=5000 & Amount <=9999 & FundCode==40101)
+rankseven <- subset(Gift_Analysis_Dec21_22, Amount >=10000 & FundCode==40101)
+
+sum(rankone$Amount)
+sum(ranktwo$Amount)
+sum(rankthree$Amount)
+sum(rankfour$Amount)
+sum(rankfive$Amount)
+sum(ranksix$Amount)
+sum(rankseven$Amount)
+
+median(rankone$Amount)
+median(ranktwo$Amount)
+median(rankthree$Amount)
+median(rankfour$Amount)
+median(rankfive$Amount)
+median(ranksix$Amount)
+median(rankseven$Amount)
+
+
+
+## Method of donation frequencies per month
+
+table(Gift_Analysis_Dec21_22$Method, Gift_Analysis_Dec21_22$month, Gift_Analysis_Dec21_22$year)
+
+Gift_Analysis_Dec21_22 %>% 
+  group_by(year,month) %>%
+  freq(Method, report.nas = FALSE, cumul = FALSE)
+
+
+##Describing donation reason (campaign, fund or motive) by month
+
+reason_ranks <- Gift_Analysis_Dec21_22 %>%
+    group_by(month, year, Reason) %>%
+    summarise(count = n()) %>%
+    top_n(n = 5, wt = count)
+
+most_reasons <- subset(Gift_Analysis_Dec21_22, Reason == c("520 - Development General", "420 - Community Events General", "140 - Gender Justice Organizing GP", "410 - Tribute to Change", "510 - Workplace Campaigns"))
+
+
+numbyreason_permonth <-most_reasons %>%
+ggplot(most_reasons, mapping = aes(x=reorder(format(most_reasons$GiftDate,'%b %y'), most_reasons$GiftDate), 
+  outline = FALSE, fill = Reason)) +
+  geom_histogram(stat = "count") +
+  ylab("Amount of Gifts") +
+  xlab("Month") +
+  ggtitle("Number of Gifts by Reason per Month")+ 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_fill_viridis(discrete=TRUE, option="H")
+  
+totalamountreason_sumdata <- most_reasons %>% #Total raised per Month
+  filter(FundCode == "40101") %>% 
+  mutate(yearmon = format(GiftDate, "%Y-%m")) %>% 
+  group_by(yearmon, Reason) %>%
+  summarise(total = sum(Amount))
+
+
+totamount_perreason <- ggplot(totalamountreason_sumdata, aes(yearmon,total, fill=Reason), outline = FALSE)+ 
+  geom_col(position = "stack") +
+  ylab("Total Raised $") +
+  xlab("Month") +
+  ggtitle("Total Raised by Reason per Month") +
+  theme(plot.title = element_text(hjust = 0.5),
+  axis.text.x = element_text(angle = 65, hjust = 1, face="bold")) +
+  scale_x_discrete(labels=c("2021-12" = "December 21", "2022-01" = "January" , "2022-02" = "February", "2022-03" ="March", "2022-04" = "April",
+                            "2022-05" = "May", "2022-06" = "June", "2022-07" = "July", "2022-08" = "August", "2022-09" = "September", 
+                            "2022-10" = "October", "2022-11" = "November", "2022-12" = "December 22"))+
+  guides(fill=guide_legend(title="5 Top Reasons"))+
+  scale_fill_viridis(discrete=TRUE, option="H")
+  
+  
+  
+##Describing Acknowledgement frequencies per month
+
+Gift_Analysis_Dec21_22 %>% 
+  group_by(year,month) %>%
+  freq(Ack, report.nas = FALSE, cumul = FALSE)
+  
+Gift_Analysis_Dec21_22$gift_to_entry_date_diff <- difftime(Gift_Analysis_Dec21_22$GiftDate, Gift_Analysis_Dec21_22$EntryDate, units = c("days"))
+Gift_Analysis_Dec21_22$gift_to_entry_date_diff <- as.numeric(Gift_Analysis_Dec21_22$gift_to_entry_date_diff)
+
+Gift_Analysis_Dec21_22$gift_to_ack_date_diff <- difftime(Gift_Analysis_Dec21_22$GiftDate, Gift_Analysis_Dec21_22$AckDate, units = c("days"))
+Gift_Analysis_Dec21_22$gift_to_ack_date_diff <- as.numeric(Gift_Analysis_Dec21_22$gift_to_ack_date_diff)
+
+Gift_Analysis_Dec21_22$entry_to_ack_date_diff <- difftime(Gift_Analysis_Dec21_22$EntryDate, Gift_Analysis_Dec21_22$AckDate, units = c("days"))
+Gift_Analysis_Dec21_22$entry_to_ack_date_diff <- as.numeric(Gift_Analysis_Dec21_22$entry_to_ack_date_diff)
+
+
+Gift_Analysis_Dec21_22 %>% #Checking out the difference
+mutate(seven_avg= rollmean(gift_to_entry_date_diff, 7,
+                             align="left",
+                             fill=0)) %>%
+  relocate(seven_avg) %>%
+  head()
+  
+Gift_Analysis_Dec21_22 %>% #Calculating seven day difference between gift date and entry date
+mutate(seven_avg= rollmean(gift_to_entry_date_diff, 7,
+                             align="left",
+                             fill=0)) %>%
+ggplot(aes(x=GiftDate,y=gift_to_entry_date_diff)) +
+  geom_col(fill="pink")+
+  geom_line(aes(y = seven_avg), 
+            color = "red", 
+            size = .75)+
+  ylim(0,-100)+
+  labs(title="7-day Average Difference between Gift and Entry Date",
+       y="Difference in Days")
+       
+Gift_Analysis_Dec21_22 %>% #Calculating the bi-weekly difference
+mutate(biweek_avg= rollmean(gift_to_entry_date_diff, 14,
+                             align="left",
+                             fill=0)) %>%
+ggplot(aes(x=GiftDate,y=gift_to_entry_date_diff)) +
+  geom_col(fill="pink")+
+  geom_line(aes(y = biweek_avg), 
+            color = "red", 
+            size = .75)+
+  ylim(0,-100)+
+  labs(title="Bi-Weekly Average Difference between Gift and Entry Date",
+       y="Difference in Days", x="Gift Date") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+Gift_Analysis_Dec21_22 %>% #Calculating the bi-weekly difference from Entry to Ack Date
+mutate(biweek_avg= rollmean(entry_to_ack_date_diff, 14,
+                             align="left",
+                             fill=0)) %>%
+ggplot(aes(x=GiftDate,y=entry_to_ack_date_diff)) +
+  geom_col(fill="pink")+
+  geom_line(aes(y = biweek_avg), 
+            color = "red", 
+            size = .75)+
+  ylim(100,-100)+
+  labs(title="Bi-Weekly Average Difference between Entry and Ack Date",
+       y="Difference in Days")       
+
+Gift_Analysis_Dec21_22 %>%
+    group_by(month, year) %>%
+    summarise(mean = mean(gift_to_ack_date_diff, na.rm=TRUE))     
+
+Gift_Analysis_Dec21_22 %>%
+    group_by(month, year) %>%
+    summarise(mean = mean(entry_to_ack_date_diff, na.rm=TRUE))   
+
+
+#Calculating the change rate of gift processing
+
+Gift_Analysis_Dec21_22$gte_pctchange <- Gift_Analysis_Dec21_22 %>%
+  mutate(pct_change = (gift_to_entry_date_diff/lag(gift_to_entry_date_diff) - 1) * 100) 
+
+
+mutate(biweek_avg= rollmean(gift_to_entry_date_diff, 14,
+                             align="left",
+                             fill=0)) %>%
+
+
+%>% #Calculating pct change between gift date and entry date
+mutate(pct_change = (gift_to_entry_date_diff/lag(gift_to_entry_date_diff) - 1) * 100) %>%
+ggplot(aes(x=GiftDate,y=pct_change)) +
+  geom_col(fill="pink")+
+  geom_hline(yintercept = mean(pct_change),
+            color = "red")+
+  ylim(100,-100)+
+  labs(title="Percent Change of Difference between Gift and Entry Date",
+       y="% Change")
+
+git add /Users/mmercadodiaz/DesktopScreenshot 2025-08-04 at 1.36.02.PM.png
+git commit -m 'add png file'
+git remote add origin https://github.com/xxx.git
+git push -u origin master
+
